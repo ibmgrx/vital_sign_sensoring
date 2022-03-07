@@ -123,9 +123,8 @@ void loop() {
       ledState = !ledState;
       digitalWrite(ledPin, ledState);
     }
-    
-      print_Data();
-      delay(10);
+    print_Data();
+    delay(10);
 }
 //am2302
 void print_Data(void){
