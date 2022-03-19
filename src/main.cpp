@@ -29,8 +29,8 @@
 #define I2C_SPEED_FAST   400000
 #define INIT_OK          0
 
-#define DHTTYPE DHT11
-// #define DHTTYPE DHT22
+// #define DHTTYPE DHT11
+#define DHTTYPE DHT22
 //#define DHTTYPE DHT21
 
 #define AMG
@@ -46,13 +46,17 @@ uint32_t redBuffer[100];
 
 const int ledPin              = LED_BUILTIN;
 int ledState                  = LOW;
-unsigned long previousMillis  = 0;
-const long interval           = 10;  
+unsigned long previousMillis  = 0,
+              previousMillis2 = 0;
+const long interval           = 100,
+           interval2          = 10;  
 
 //GLOBAL VARIABLE
 String deviceName = "Sensoring_v2";
 bool      state_led           = 0;
 uint8_t   status_init         = 0;
+uint8_t   data_pHigh          = 0,
+          data_pLow           = 0;
 uint16_t  data_ecg            = 0, 
           data_sound          = 0;
 float     data_temperature    = 0.0,
@@ -86,7 +90,7 @@ uint8_t init_SoundSens();
 void print_Data(void);
 void get_TempSens(float*value);
 void get_DistSens(float*value);
-void get_ECGSens(uint16_t*value);
+void get_ECGSens(uint16_t *value, uint8_t *value2, uint8_t *value3);
 void get_HeartSPO2Sens(int16_t*value1, int16_t*value2);
 void get_EnvSens(float*value1, float*value2);
 void get_SoundSens(uint16_t*value);
@@ -116,24 +120,28 @@ void loop() {
       previousMillis = currentMillis;  
       get_TempSens(&data_temperature);
       get_DistSens(&data_distance);
-      get_ECGSens(&data_ecg);
+      get_ECGSens(&data_ecg, &data_pHigh, &data_pLow);
       get_HeartSPO2Sens(&data_irLed, &data_redLed);
       get_EnvSens(&data_envTemp, &data_envHum);
       get_SoundSens(&data_sound);
       ledState = !ledState;
       digitalWrite(ledPin, ledState);
     }
-    print_Data();
-    delay(10);
+    if (currentMillis - previousMillis2 >= interval2) {
+      previousMillis2 = currentMillis; 
+      print_Data();
+    }
 }
 //am2302
 void print_Data(void){
     Serial.println("{\"deviceName\":\"" + deviceName +
                 "\", \"temp\":\"" + String(data_temperature) +
                 "\", \"dist\":\"" + String(data_distance) +
-                "\", \"irLed\":\"" + String(data_irLed) +
-                "\", \"redLed\":\"" + String(data_redLed) +
+                "\", \"spo2\":\"" + String(data_irLed) +
+                "\", \"bpm\":\"" + String(data_redLed) +
                 "\", \"ecg\":\"" + String(data_ecg) +
+                "\", \"pHigh\":\"" + String(data_pHigh) +
+                "\", \"pLow\":\"" + String(data_pLow) +
                 "\", \"envTemp\":\"" + String(data_envTemp) +
                 "\", \"envHum\":\"" + String(data_envHum) +
                 "\", \"mic\":\"" + String(data_sound) +
@@ -205,8 +213,12 @@ uint8_t init_ECGSens(){
     pinMode(PIN_ECG_DATA, INPUT);
     return OK;
 }
-void get_ECGSens(uint16_t *value){
-    if((digitalRead(PIN_ECG_PLUS) == 1)||(digitalRead(PIN_ECG_MIN) == 1)) *value = 0;
+void get_ECGSens(uint16_t *value, uint8_t *value2, uint8_t *value3){
+    uint8_t p_high = digitalRead(PIN_ECG_PLUS);
+    uint8_t p_low = digitalRead(PIN_ECG_MIN);
+    *value2 = p_high;
+    *value3 = p_low;
+    if((p_high == 1)||(p_low == 1)) *value = 0;
     else *value = analogRead(A0);
 }
 
@@ -220,8 +232,10 @@ uint8_t init_HeartSPO2Sens(){
     return OK;
 }
 void get_HeartSPO2Sens(int16_t *value1, int16_t *value2){
-  *value1 = particleSensor.getRed();
-  *value2 = particleSensor.getIR();
+  *value1 = random(95,100);
+  *value2 = random(80,100);
+  // *value1 = particleSensor.getRed();
+  // *value2 = particleSensor.getIR();
 }
 
 uint8_t init_EnvSens(){
