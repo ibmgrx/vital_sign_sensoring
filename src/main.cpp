@@ -14,9 +14,8 @@
 #include <Adafruit_MLX90614.h>
 #include <SparkFun_GridEYE_Arduino_Library.h>
 #include <SharpIR.h>
-#include <MAX30105.h>
+#include <MAX30100_PulseOximeter.h>
 #include <DHT.h>
-#include <SoftwareSerial.h>
 
 #define ERROR            1
 #define OK               0
@@ -28,6 +27,9 @@
 #define PIN_DHT          11
 #define I2C_SPEED_FAST   400000
 #define INIT_OK          0
+#define INTERVAL_SPO2    1000
+#define INTERVAL_GET     100
+#define INTERVAL_PRINT   10
 
 // #define DHTTYPE DHT11
 #define DHTTYPE DHT22
@@ -36,20 +38,11 @@
 #define AMG
 // #define MLX
 
-#if defined(__AVR_ATmega328P__) || defined(__AVR_ATmega168__)
-uint16_t irBuffer[100];
-uint16_t redBuffer[100];
-#else
-uint32_t irBuffer[100];
-uint32_t redBuffer[100];
-#endif
-
 const int ledPin              = LED_BUILTIN;
 int ledState                  = LOW;
 unsigned long previousMillis  = 0,
-              previousMillis2 = 0;
-const long interval           = 100,
-           interval2          = 10;  
+              previousMillis2 = 0,
+              previousMillis3 = 0; 
 
 //GLOBAL VARIABLE
 String deviceName = "Sensoring_v2";
@@ -77,8 +70,8 @@ GridEYE grideye;
 #endif
 
 SharpIR sensor( SharpIR::GP2Y0A21YK0F, PIN_SharpIR );
-MAX30105 particleSensor;
 DHT dht(PIN_DHT, DHTTYPE);
+PulseOximeter pox;
 
 //PROTOTYPE
 uint8_t init_TempSens();
@@ -115,19 +108,23 @@ void setup() {
 }
 
 void loop() {
+  pox.update();
     unsigned long currentMillis = millis();
-    if (currentMillis - previousMillis >= interval) {
+    if (currentMillis - previousMillis >= INTERVAL_GET) {
       previousMillis = currentMillis;  
       get_TempSens(&data_temperature);
       get_DistSens(&data_distance);
       get_ECGSens(&data_ecg, &data_pHigh, &data_pLow);
-      get_HeartSPO2Sens(&data_irLed, &data_redLed);
       get_EnvSens(&data_envTemp, &data_envHum);
       get_SoundSens(&data_sound);
       ledState = !ledState;
       digitalWrite(ledPin, ledState);
     }
-    if (currentMillis - previousMillis2 >= interval2) {
+    if (currentMillis - previousMillis3 >= INTERVAL_SPO2){
+      previousMillis3 = currentMillis;
+      get_HeartSPO2Sens(&data_irLed, &data_redLed);
+    }
+    if (currentMillis - previousMillis2 >= INTERVAL_PRINT) {
       previousMillis2 = currentMillis; 
       print_Data();
     }
@@ -198,11 +195,11 @@ uint8_t init_DistSens(){
     return OK;
 }
 void get_DistSens(float *value){
-    for (uint8_t i = 0; i<100; i++){
+    for (uint8_t i = 0; i<20; i++){
       dist = sensor.getDistance();
       sampling_dist += dist;
     }
-    *value = sampling_dist/100;
+    *value = sampling_dist/20;
     sampling_dist = 0;
 }
 
@@ -224,18 +221,24 @@ void get_ECGSens(uint16_t *value, uint8_t *value2, uint8_t *value3){
 
 uint8_t init_HeartSPO2Sens(){
     Serial.println("==== INIT SPO2 SENS ====");
-    if (!particleSensor.begin(Wire, I2C_SPEED_FAST)){
-      Serial.println("[STATUS]     : SPO2 ERROR");
-      return ERROR;
+   if (!pox.begin()) {
+        Serial.println("ERR");
+        return ERROR;
+    } else {
+        Serial.println("OK");
     }
-    particleSensor.setup();
+    pox.setIRLedCurrent(MAX30100_LED_CURR_7_6MA);
     return OK;
 }
+
 void get_HeartSPO2Sens(int16_t *value1, int16_t *value2){
-  *value1 = random(95,100);
-  *value2 = random(80,100);
+  // *value1 = random(95,100);
+  // *value2 = random(80,100);
   // *value1 = particleSensor.getRed();
   // *value2 = particleSensor.getIR();
+  *value1 = pox.getSpO2();
+  if(*value1>100)*value1=100;
+  *value2 = pox.getHeartRate();
 }
 
 uint8_t init_EnvSens(){
